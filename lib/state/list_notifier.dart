@@ -1,24 +1,33 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 
+import '../models/brand.dart';
+import '../models/category.dart';
+import '../models/customer.dart';
 import '../models/entity.dart';
 import '../models/list_query.dart';
+import '../models/order.dart';
 import '../models/page_result.dart';
+import '../models/queries.dart';
+import '../models/review.dart';
 import '../models/series.dart';
-import '../models/series_query.dart';
 import '../models/sneaker.dart';
-import '../models/sneaker_query.dart';
 import '../repositories/entity_repository.dart';
 
 enum LoadStatus { idle, loading, success, error }
 
 typedef SneakerListNotifier = ListNotifier<Sneaker, SneakerQuery>;
 typedef SeriesListNotifier = ListNotifier<Series, SeriesQuery>;
+typedef BrandListNotifier = ListNotifier<Brand, BrandQuery>;
+typedef CategoryListNotifier = ListNotifier<Category, CategoryQuery>;
+typedef CustomerListNotifier = ListNotifier<Customer, CustomerQuery>;
+typedef OrderListNotifier = ListNotifier<Order, OrderQuery>;
+typedef ReviewListNotifier = ListNotifier<Review, ReviewQuery>;
 
 class ListNotifier<T extends Entity, Q extends ListQuery<Q>>
     extends ChangeNotifier {
-  ListNotifier(this._repository, this._query);
+  ListNotifier(this.repository, this._query);
 
-  final EntityRepository<T, Q> _repository;
+  final EntityRepository<T, Q> repository;
   Q _query;
   PageResult<T> _result = PageResult<T>.empty();
   LoadStatus _status = LoadStatus.idle;
@@ -39,7 +48,7 @@ class ListNotifier<T extends Entity, Q extends ListQuery<Q>>
     _error = null;
     notifyListeners();
     try {
-      final result = await _repository.find(_query);
+      final result = await repository.find(_query);
       if (ticket != _ticket) return;
       _result = result;
       _status = LoadStatus.success;
@@ -75,28 +84,38 @@ class ListNotifier<T extends Entity, Q extends ListQuery<Q>>
   }
 
   Future<int> deleteSelected() async {
-    final count = await _repository.deleteMany(_selected.toList());
+    final count = await repository.deleteMany(_selected.toList());
     _selected.clear();
     await load();
     return count;
   }
 
-  Future<T?> findById(int id) => _repository.findById(id);
+  Future<T?> findById(int id) => repository.findById(id);
+
+  Future<List<T>> options() => repository.all();
+
+  Future<T> save(T item) async {
+    final saved = item.id > 0
+        ? await repository.update(item)
+        : await repository.create(item);
+    await load();
+    return saved;
+  }
 
   Future<void> softDelete(int id) async {
-    await _repository.softDelete(id);
+    await repository.softDelete(id);
     _selected.remove(id);
     await load();
   }
 
   Future<void> hardDelete(int id) async {
-    await _repository.hardDelete(id);
+    await repository.hardDelete(id);
     _selected.remove(id);
     await load();
   }
 
   Future<void> restore(int id) async {
-    await _repository.restore(id);
+    await repository.restore(id);
     await load();
   }
 }

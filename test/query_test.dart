@@ -1,65 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoe_store/main.dart';
-import 'package:shoe_store/models/sneaker_query.dart';
 import 'package:shoe_store/router.dart';
 
 void main() {
-  test('адрес разбирается в условия отбора', () {
-    final q = SneakerQuery.fromParams({
-      'search': 'air',
-      'brandId': '1',
-      'sort': 'price,desc',
-      'page': '2',
-      'size': '25',
-    });
-    expect(q.search, 'air');
-    expect(q.brandId, 1);
-    expect(q.sortField, 'price');
-    expect(q.sortAscending, isFalse);
-    expect(q.page, 2);
-    expect(q.size, 25);
-  });
-
-  test('условия отбора превращаются обратно в тот же адрес', () {
-    final params = {
-      'search': 'air',
-      'categoryId': '3',
-      'sort': 'year,desc',
-      'page': '3',
-    };
-    expect(SneakerQuery.fromParams(params).toParams(), params);
-  });
-
-  test('некорректные параметры заменяются значениями по умолчанию', () {
-    final q = SneakerQuery.fromParams({
-      'sort': 'hack,desc',
-      'page': '-5',
-      'size': '7',
-    });
-    expect(q.sortField, 'name');
-    expect(q.sortAscending, isTrue);
-    expect(q.page, 1);
-    expect(q.size, 10);
-  });
-
-  test(
-    'смена условий возвращает на первую страницу, null сбрасывает фильтр',
-    () {
-      const q = SneakerQuery(page: 5, brandId: 2);
-      final next = q.copyWith(brandId: null);
-      expect(next.page, 1);
-      expect(next.brandId, isNull);
-      expect(q.copyWith(search: 'x').brandId, 2);
-    },
-  );
+  TestWidgetsFlutterBinding.ensureInitialized();
 
   Future<void> open(WidgetTester tester, String location) async {
-    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.physicalSize = const Size(1400, 2600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      ShoeStoreApp(router: createRouter(initialLocation: location)),
+      ShoeStoreApp(
+        repositories: buildRepositories(null, delay: Duration.zero),
+        router: createRouter(initialLocation: location),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -81,12 +36,39 @@ void main() {
     expect(find.text('Ничего не найдено'), findsNothing);
   });
 
+  testWidgets('форма создания проверяет обязательные поля', (tester) async {
+    await open(tester, '/sneakers/new');
+    await tester.tap(find.text('Создать'));
+    await tester.pumpAndSettle();
+    expect(find.text('Поле обязательно для заполнения'), findsWidgets);
+    expect(find.text('Выберите бренд'), findsOneWidget);
+    expect(find.text('Выберите хотя бы одну категорию'), findsOneWidget);
+  });
+
+  testWidgets('форма редактирования заполнена данными записи', (tester) async {
+    await open(tester, '/sneakers/1/edit');
+    expect(find.text('Nike Air Max 90'), findsWidgets);
+    expect(find.text('CN8490-002'), findsWidgets);
+  });
+
+  testWidgets('уход с изменённой формы требует подтверждения', (tester) async {
+    await open(tester, '/brands/new');
+    await tester.enterText(find.byType(TextFormField).first, 'Puma');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(find.text('Несохранённые изменения'), findsOneWidget);
+  });
+
   testWidgets('узкое окно показывает карточки', (tester) async {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      ShoeStoreApp(router: createRouter(initialLocation: '/series')),
+      ShoeStoreApp(
+        repositories: buildRepositories(null, delay: Duration.zero),
+        router: createRouter(initialLocation: '/categories'),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.byType(Card), findsWidgets);

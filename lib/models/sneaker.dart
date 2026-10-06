@@ -1,4 +1,5 @@
 import 'entity.dart';
+import 'json.dart';
 
 class Sneaker extends Entity {
   @override
@@ -8,8 +9,8 @@ class Sneaker extends Entity {
   final int year;
   final int price;
   final int brandId;
-  final int seriesId;
-  final int categoryId;
+  final List<int> seriesIds;
+  final List<int> categoryIds;
   final int stockTotal;
   final int stockAvailable;
   @override
@@ -22,8 +23,8 @@ class Sneaker extends Entity {
     required this.year,
     required this.price,
     required this.brandId,
-    required this.seriesId,
-    required this.categoryId,
+    this.seriesIds = const [],
+    this.categoryIds = const [],
     required this.stockTotal,
     required this.stockAvailable,
     this.deletedAt,
@@ -36,8 +37,8 @@ class Sneaker extends Entity {
     int? year,
     int? price,
     int? brandId,
-    int? seriesId,
-    int? categoryId,
+    List<int>? seriesIds,
+    List<int>? categoryIds,
     int? stockTotal,
     int? stockAvailable,
     DateTime? deletedAt,
@@ -50,11 +51,39 @@ class Sneaker extends Entity {
       year: year ?? this.year,
       price: price ?? this.price,
       brandId: brandId ?? this.brandId,
-      seriesId: seriesId ?? this.seriesId,
-      categoryId: categoryId ?? this.categoryId,
+      seriesIds: seriesIds ?? this.seriesIds,
+      categoryIds: categoryIds ?? this.categoryIds,
       stockTotal: stockTotal ?? this.stockTotal,
       stockAvailable: stockAvailable ?? this.stockAvailable,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'sku': sku,
+    'year': year,
+    'price': price,
+    'brandId': brandId,
+    'seriesIds': seriesIds,
+    'categoryIds': categoryIds,
+    'stockTotal': stockTotal,
+    'stockAvailable': stockAvailable,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory Sneaker.fromJson(Map<String, dynamic> json) => Sneaker(
+    id: asInt(json['id']),
+    name: asString(json['name']),
+    sku: asString(json['sku']),
+    year: asInt(json['year']),
+    price: asInt(json['price']),
+    brandId: asInt(json['brandId']),
+    seriesIds: asIntList(json['seriesIds']),
+    categoryIds: asIntList(json['categoryIds']),
+    stockTotal: asInt(json['stockTotal']),
+    stockAvailable: asInt(json['stockAvailable']),
+    deletedAt: asDate(json['deletedAt']),
+  );
 }

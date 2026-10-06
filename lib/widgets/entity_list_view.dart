@@ -5,37 +5,10 @@ import 'package:provider/provider.dart';
 import '../models/entity.dart';
 import '../models/list_query.dart';
 import '../state/list_notifier.dart';
+import 'app_scaffold.dart';
 import 'entity_card_list.dart';
 import 'entity_table.dart';
 import 'list_controls.dart';
-
-class AppScaffold extends StatelessWidget {
-  const AppScaffold({super.key, required this.title, required this.body});
-
-  final String title;
-  final Widget body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          TextButton(
-            onPressed: () => context.go('/sneakers'),
-            child: const Text('Кроссовки'),
-          ),
-          TextButton(
-            onPressed: () => context.go('/series'),
-            child: const Text('Линейки'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: body,
-    );
-  }
-}
 
 class EntityListView<T extends Entity, Q extends ListQuery<Q>>
     extends StatefulWidget {
@@ -125,6 +98,18 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
     return result ?? false;
   }
 
+  Future<void> _guard(Future<void> Function() action) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    try {
+      await action();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: errorColor),
+      );
+    }
+  }
+
   Future<void> _deleteSelected() async {
     final n = _notifier;
     final messenger = ScaffoldMessenger.of(context);
@@ -139,25 +124,29 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
   }
 
   Future<void> _hardDelete(T item) async {
-    final n = _notifier;
     final ok = await _confirm(
       'Удалить навсегда?',
       '«${widget.cardTitle(item)}» будет стёрта без возможности восстановления.',
     );
-    if (ok) await n.hardDelete(item.id);
+    if (ok) await _guard(() => _notifier.hardDelete(item.id));
   }
 
   List<Widget> _actions(T item) => [
+    IconButton(
+      tooltip: 'Изменить',
+      icon: const Icon(Icons.edit_outlined),
+      onPressed: () => context.push('${widget.basePath}/${item.id}/edit'),
+    ),
     item.isDeleted
         ? IconButton(
             tooltip: 'Восстановить',
             icon: const Icon(Icons.restore),
-            onPressed: () => _notifier.restore(item.id),
+            onPressed: () => _guard(() => _notifier.restore(item.id)),
           )
         : IconButton(
             tooltip: 'Удалить',
             icon: const Icon(Icons.delete_outline),
-            onPressed: () => _notifier.softDelete(item.id),
+            onPressed: () => _guard(() => _notifier.softDelete(item.id)),
           ),
     IconButton(
       tooltip: 'Удалить навсегда',
@@ -170,6 +159,7 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
 
   Widget _sortMenu(Q q) {
     final sortable = widget.columns.where((c) => c.sortField != null).toList();
+    if (sortable.isEmpty) return const SizedBox.shrink();
     final current = sortable.firstWhere(
       (c) => c.sortField == q.sortField,
       orElse: () => sortable.first,
@@ -215,7 +205,7 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SizedBox(
-                    width: narrow ? double.infinity : 300,
+                    width: narrow ? double.infinity : 280,
                     child: SearchField(
                       value: q.search,
                       hint: widget.searchHint,
@@ -235,6 +225,11 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
                       icon: const Icon(Icons.filter_alt_off_outlined),
                       label: const Text('Сбросить'),
                     ),
+                  FilledButton.icon(
+                    onPressed: () => context.push('${widget.basePath}/new'),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Добавить'),
+                  ),
                 ],
               ),
               if (n.hasSelection)
@@ -384,7 +379,7 @@ class EntityDetailView<T extends Entity, Q extends ListQuery<Q>>
                                           CrossAxisAlignment.start,
                                       children: [
                                         SizedBox(
-                                          width: 160,
+                                          width: 170,
                                           child: Text(
                                             label,
                                             style: TextStyle(
@@ -400,6 +395,13 @@ class EntityDetailView<T extends Entity, Q extends ListQuery<Q>>
                                   const SizedBox(height: 16),
                                   extra!(context, item),
                                 ],
+                                const SizedBox(height: 16),
+                                FilledButton.icon(
+                                  onPressed: () =>
+                                      context.push('$listPath/$id/edit'),
+                                  icon: const Icon(Icons.edit_outlined),
+                                  label: const Text('Изменить'),
+                                ),
                               ],
                             ),
                     ),

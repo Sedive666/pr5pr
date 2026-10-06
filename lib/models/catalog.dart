@@ -1,13 +1,10 @@
-const brands = {1: 'Nike', 2: 'Adidas', 3: 'New Balance'};
-
-const categories = {
-  1: 'Беговые',
-  2: 'Баскетбольные',
-  3: 'Повседневные',
-  4: 'Скейтбординг',
-};
+const shoeSizes = [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46];
 
 String formatPrice(int value) => value.toString().replaceAllMapped(
   RegExp(r'\B(?=(\d{3})+(?!\d))'),
   (_) => ' ',
 );
+
+String formatDate(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}.'
+    '${value.month.toString().padLeft(2, '0')}.${value.year}';

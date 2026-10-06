@@ -1,40 +1,36 @@
 import 'entity.dart';
 import 'json.dart';
 
-class Series extends Entity {
+class Brand extends Entity {
   @override
   final int id;
   final String name;
-  final int brandId;
   final String country;
-  final int launchYear;
+  final int foundedYear;
   @override
   final DateTime? deletedAt;
 
-  const Series({
+  const Brand({
     required this.id,
     required this.name,
-    required this.brandId,
     required this.country,
-    required this.launchYear,
+    required this.foundedYear,
     this.deletedAt,
   });
 
-  Series copyWith({
+  Brand copyWith({
     int? id,
     String? name,
-    int? brandId,
     String? country,
-    int? launchYear,
+    int? foundedYear,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
   }) {
-    return Series(
+    return Brand(
       id: id ?? this.id,
       name: name ?? this.name,
-      brandId: brandId ?? this.brandId,
       country: country ?? this.country,
-      launchYear: launchYear ?? this.launchYear,
+      foundedYear: foundedYear ?? this.foundedYear,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
     );
   }
@@ -42,18 +38,16 @@ class Series extends Entity {
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
-    'brandId': brandId,
     'country': country,
-    'launchYear': launchYear,
+    'foundedYear': foundedYear,
     'deletedAt': deletedAt?.toIso8601String(),
   };
 
-  factory Series.fromJson(Map<String, dynamic> json) => Series(
+  factory Brand.fromJson(Map<String, dynamic> json) => Brand(
     id: asInt(json['id']),
     name: asString(json['name']),
-    brandId: asInt(json['brandId']),
     country: asString(json['country']),
-    launchYear: asInt(json['launchYear']),
+    foundedYear: asInt(json['foundedYear']),
     deletedAt: asDate(json['deletedAt']),
   );
 }
