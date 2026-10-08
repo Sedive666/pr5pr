@@ -51,3 +51,20 @@ Validator combine(List<Validator> validators) => (v) {
   }
   return null;
 };
+
+final passwordRules = <(String, bool Function(String))>[
+  ('не короче 8 символов', (p) => p.length >= 8),
+  ('есть цифра', (p) => RegExp(r'\d').hasMatch(p)),
+  (
+    'есть специальный символ (!@#\$% и т. п.)',
+    (p) => RegExp(r'[^\p{L}\d\s]', unicode: true).hasMatch(p),
+  ),
+];
+
+String? strongPassword(String? value) {
+  final failed = [
+    for (final (label, ok) in passwordRules)
+      if (!ok(value ?? '')) label,
+  ];
+  return failed.isEmpty ? null : 'Не выполнено: ${failed.join(', ')}';
+}

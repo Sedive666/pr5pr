@@ -167,9 +167,9 @@ function seed() {
       { id: 12, customerId: 6, sneakerId: 13, rating: 5, text: 'Бегаю каждый день, за три месяца износа нет.', createdAt: iso(2025, 9, 28), deletedAt: null },
     ],
     users: [
-      { id: 1, login: 'admin', passwordHash: hash('admin123'), role: 'admin', name: 'Администратор', deletedAt: null },
-      { id: 2, login: 'manager', passwordHash: hash('manager123'), role: 'manager', name: 'Менеджер зала', deletedAt: null },
-      { id: 3, login: 'client', passwordHash: hash('client123'), role: 'client', name: 'Покупатель', deletedAt: null },
+      { id: 1, login: 'admin', passwordHash: hash('admin123'), role: 'admin', name: 'Администратор', customerId: null, deletedAt: null },
+      { id: 2, login: 'manager', passwordHash: hash('manager123'), role: 'manager', name: 'Менеджер зала', customerId: null, deletedAt: null },
+      { id: 3, login: 'client', passwordHash: hash('client123'), role: 'client', name: 'Дмитрий Козлов', customerId: 3, deletedAt: null },
     ],
     refreshTokens: new Set(),
   };
@@ -238,7 +238,7 @@ const EXPANDERS = {
   reviews: expandReview,
 };
 
-const expandUser = (u) => ({ id: u.id, login: u.login, role: u.role, name: u.name });
+const expandUser = (u) => ({ id: u.id, login: u.login, role: u.role, name: u.name, customerId: u.customerId ?? null, blocked: !!u.deletedAt });
 
 // ──────────────────── поиск, фильтры, сортировка, страницы ────────────────────
 
@@ -545,6 +545,45 @@ function currentUser(req) {
   return db.users.find((u) => u.id === payload.sub && !u.deletedAt) || null;
 }
 
+const ROLES = ['client', 'manager', 'admin'];
+const ROLE_TITLE = { client: 'покупатель', manager: 'менеджер', admin: 'администратор' };
+const PASSWORD_RE = /^(?=.*\d)(?=.*[^\p{L}\d\s]).{8,}$/u;
+const LOGIN_RE = /^[A-Za-z0-9_.-]{3,20}$/;
+
+function requireRole(req, res, roles) {
+  const user = currentUser(req);
+  if (!user) {
+    fail(res, 401, 'Требуется аутентификация');
+    return null;
+  }
+  if (!roles.includes(user.role)) {
+    fail(res, 403, `Операция недоступна для роли «${ROLE_TITLE[user.role]}»`);
+    return null;
+  }
+  return user;
+}
+
+function issueTokens(user) {
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = sign({ sub: user.id, role: user.role, type: 'access', exp: now + ACCESS_TTL });
+  const refreshToken = sign({ sub: user.id, type: 'refresh', exp: now + REFRESH_TTL });
+  db.refreshTokens.add(refreshToken);
+  return { accessToken, refreshToken, expiresIn: ACCESS_TTL, user: expandUser(user) };
+}
+
+const PUBLIC_READ = ['sneakers', 'brands', 'series', 'categories', 'reviews'];
+
+const ANY = ROLES;
+const STAFF = ['manager', 'admin'];
+const MANAGER = ['manager'];
+const ADMIN = ['admin'];
+
+function allowedRoles(collection, method, action, q) {
+  if (action === 'restore' || q.hard === 'true' || q.includeDeleted === 'true') return ADMIN;
+  if (method === 'GET') return PUBLIC_READ.includes(collection) ? ANY : STAFF;
+  return MANAGER;
+}
+
 // ─────────────────────────────── маршруты ───────────────────────────────
 
 const ROUTE_RE = /^\/api\/([a-z]+)(?:\/(\d+))?(?:\/([a-z-]+))?$/;
@@ -641,17 +680,43 @@ async function handle(req, res, url) {
     return send(res, 200, { status: 'ok', time: new Date().toISOString() });
   }
 
-  // ── аутентификация: включается в ПР5, роли на запись сейчас не проверяются ──
+  // ── аутентификация ──
   if (path === '/api/auth/login' && method === 'POST') {
     const body = await readBody(req);
     if (!body) return fail(res, 400, 'Тело запроса не является корректным JSON');
     const found = db.users.find((u) => u.login === body.login && u.passwordHash === hash(String(body.password || '')));
     if (!found) return fail(res, 401, 'Неверный логин или пароль');
-    const now = Math.floor(Date.now() / 1000);
-    const accessToken = sign({ sub: found.id, role: found.role, type: 'access', exp: now + ACCESS_TTL });
-    const refreshToken = sign({ sub: found.id, type: 'refresh', exp: now + REFRESH_TTL });
-    db.refreshTokens.add(refreshToken);
-    return send(res, 200, { accessToken, refreshToken, expiresIn: ACCESS_TTL, user: expandUser(found) });
+    if (found.deletedAt) return fail(res, 403, 'Учётная запись заблокирована администратором');
+    return send(res, 200, issueTokens(found));
+  }
+
+  if (path === '/api/auth/register' && method === 'POST') {
+    const body = await readBody(req);
+    if (!body) return fail(res, 400, 'Тело запроса не является корректным JSON');
+    const errors = {};
+    const login = String(body.login || '').trim();
+    const password = String(body.password || '');
+    const name = String(body.name || '').trim();
+    if (!LOGIN_RE.test(login)) errors.login = 'Логин: 3–20 латинских букв, цифр или знаков _ . -';
+    else if (db.users.some((u) => u.login === login)) errors.login = 'Такой логин уже занят';
+    if (!PASSWORD_RE.test(password)) errors.password = 'Пароль: не короче 8 символов, с цифрой и спецсимволом';
+    if (name.length < 2) errors.name = 'Укажите имя';
+    if (Object.keys(errors).length) return failValidation(res, errors);
+    const user = { id: nextId('users'), login, passwordHash: hash(password), role: 'client', name, customerId: null, deletedAt: null };
+    db.users.push(user);
+    return send(res, 201, issueTokens(user));
+  }
+
+  if (path === '/api/auth/refresh' && method === 'POST') {
+    const body = await readBody(req);
+    const token = body && body.refreshToken;
+    const payload = token && db.refreshTokens.has(token) ? verify(token) : null;
+    const user = payload && payload.type === 'refresh'
+      ? db.users.find((u) => u.id === payload.sub && !u.deletedAt)
+      : null;
+    if (token) db.refreshTokens.delete(token);
+    if (!user) return fail(res, 401, 'Сессия истекла, войдите заново');
+    return send(res, 200, issueTokens(user));
   }
 
   if (path === '/api/auth/me' && method === 'GET') {
@@ -666,9 +731,70 @@ async function handle(req, res, url) {
     return send(res, 204);
   }
 
+  // ── личный кабинет покупателя ──
+  if (path === '/api/my/orders' && method === 'GET') {
+    const user = requireRole(req, res, ['client']);
+    if (!user) return;
+    const rows = alive('orders').filter((o) => o.customerId === user.customerId);
+    return send(res, 200, { items: rows.map(EXPANDERS.orders), total: rows.length, page: 1, size: rows.length || 1 });
+  }
+
+  const myCancel = path.match(/^\/api\/my\/orders\/(\d+)\/cancel$/);
+  if (myCancel && method === 'POST') {
+    const user = requireRole(req, res, ['client']);
+    if (!user) return;
+    const order = byId('orders', Number(myCancel[1]));
+    if (!order || order.deletedAt || order.customerId !== user.customerId) {
+      return fail(res, 403, 'Можно отменять только собственные заказы');
+    }
+    if (order.status !== 'Новый') return fail(res, 409, `Заказ в статусе «${order.status}» отменить нельзя`);
+    order.status = 'Отменён';
+    const sneaker = byId('sneakers', order.sneakerId);
+    if (sneaker) sneaker.stockAvailable += order.quantity;
+    return send(res, 200, EXPANDERS.orders(order));
+  }
+
+  // ── администрирование ──
+  if (path === '/api/users' && method === 'GET') {
+    if (!requireRole(req, res, ADMIN)) return;
+    return send(res, 200, { items: db.users.map(expandUser), total: db.users.length, page: 1, size: db.users.length });
+  }
+
+  const userRoute = path.match(/^\/api\/users\/(\d+)$/);
+  if (userRoute && method === 'PUT') {
+    const admin = requireRole(req, res, ADMIN);
+    if (!admin) return;
+    const target = db.users.find((u) => u.id === Number(userRoute[1]));
+    if (!target) return fail(res, 404, 'Пользователь не найден');
+    const body = (await readBody(req)) || {};
+    if (target.id === admin.id && (body.role !== undefined || body.blocked)) {
+      return fail(res, 409, 'Нельзя менять роль или блокировать самого себя');
+    }
+    if (body.role !== undefined) {
+      if (!ROLES.includes(body.role)) return failValidation(res, { role: 'Неизвестная роль' });
+      target.role = body.role;
+    }
+    if (body.blocked !== undefined) target.deletedAt = body.blocked ? new Date().toISOString() : null;
+    return send(res, 200, expandUser(target));
+  }
+
+  if (path === '/api/stats' && method === 'GET') {
+    if (!requireRole(req, res, ADMIN)) return;
+    const orders = alive('orders');
+    const revenue = orders
+      .filter((o) => o.status !== 'Отменён')
+      .reduce((sum, o) => sum + o.price * o.quantity, 0);
+    const byStatus = Object.fromEntries(ORDER_STATUSES.map((s) => [s, orders.filter((o) => o.status === s).length]));
+    const counts = Object.fromEntries(COLLECTIONS.map((c) => [c, alive(c).length]));
+    const deleted = Object.fromEntries(COLLECTIONS.map((c) => [c, db[c].length - alive(c).length]));
+    const users = Object.fromEntries(ROLES.map((r) => [r, db.users.filter((u) => u.role === r).length]));
+    return send(res, 200, { revenue, byStatus, counts, deleted, users });
+  }
+
   // ── множественное удаление ──
   const bulk = path.match(/^\/api\/([a-z]+)\/bulk-delete$/);
   if (bulk && method === 'POST') {
+    if (!requireRole(req, res, MANAGER)) return;
     const collection = bulk[1];
     if (!COLLECTIONS.includes(collection)) return fail(res, 404, 'Ресурс не найден');
     const body = await readBody(req);
@@ -692,6 +818,8 @@ async function handle(req, res, url) {
   const action = m[3] || null;
   if (!COLLECTIONS.includes(collection)) return fail(res, 404, 'Ресурс не найден');
   const expand = EXPANDERS[collection];
+
+  if (!requireRole(req, res, allowedRoles(collection, method, action, q))) return;
 
   if (action === 'restore' && method === 'POST') {
     const row = byId(collection, id);

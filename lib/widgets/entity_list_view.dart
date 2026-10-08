@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/permissions.dart';
 import '../models/entity.dart';
 import '../models/list_query.dart';
+import '../state/auth_notifier.dart';
 import '../state/list_notifier.dart';
 import 'app_scaffold.dart';
 import 'entity_card_list.dart';
@@ -119,8 +121,12 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
           'Их можно восстановить, включив показ удалённых.',
     );
     if (!ok) return;
-    final count = await n.deleteSelected();
-    messenger.showSnackBar(SnackBar(content: Text('Удалено записей: $count')));
+    await _guard(() async {
+      final count = await n.deleteSelected();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Удалено записей: $count')),
+      );
+    });
   }
 
   Future<void> _hardDelete(T item) async {
@@ -131,28 +137,33 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
     if (ok) await _guard(() => _notifier.hardDelete(item.id));
   }
 
+  bool _can(Op op) => context.read<AuthNotifier>().can(op);
+
   List<Widget> _actions(T item) => [
-    IconButton(
-      tooltip: 'Изменить',
-      icon: const Icon(Icons.edit_outlined),
-      onPressed: () => context.push('${widget.basePath}/${item.id}/edit'),
-    ),
-    item.isDeleted
-        ? IconButton(
-            tooltip: 'Восстановить',
-            icon: const Icon(Icons.restore),
-            onPressed: () => _guard(() => _notifier.restore(item.id)),
-          )
-        : IconButton(
-            tooltip: 'Удалить',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _guard(() => _notifier.softDelete(item.id)),
-          ),
-    IconButton(
-      tooltip: 'Удалить навсегда',
-      icon: const Icon(Icons.delete_forever_outlined),
-      onPressed: () => _hardDelete(item),
-    ),
+    if (_can(Op.editRecords))
+      IconButton(
+        tooltip: 'Изменить',
+        icon: const Icon(Icons.edit_outlined),
+        onPressed: () => context.push('${widget.basePath}/${item.id}/edit'),
+      ),
+    if (item.isDeleted && _can(Op.restore))
+      IconButton(
+        tooltip: 'Восстановить',
+        icon: const Icon(Icons.restore),
+        onPressed: () => _guard(() => _notifier.restore(item.id)),
+      ),
+    if (!item.isDeleted && _can(Op.softDelete))
+      IconButton(
+        tooltip: 'Удалить',
+        icon: const Icon(Icons.delete_outline),
+        onPressed: () => _guard(() => _notifier.softDelete(item.id)),
+      ),
+    if (_can(Op.hardDelete))
+      IconButton(
+        tooltip: 'Удалить навсегда',
+        icon: const Icon(Icons.delete_forever_outlined),
+        onPressed: () => _hardDelete(item),
+      ),
   ];
 
   void _open(T item) => context.push('${widget.basePath}/${item.id}');
@@ -188,6 +199,7 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
   @override
   Widget build(BuildContext context) {
     final n = context.watch<ListNotifier<T, Q>>();
+    final auth = context.watch<AuthNotifier>();
     final q = widget.query;
     final result = n.result;
 
@@ -213,11 +225,12 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
                     ),
                   ),
                   ...?widget.filters?.call(q, _go),
-                  FilterChip(
-                    label: const Text('Показывать удалённые'),
-                    selected: q.includeDeleted,
-                    onSelected: (v) => _go(q.copyBase(includeDeleted: v)),
-                  ),
+                  if (auth.can(Op.viewDeleted))
+                    FilterChip(
+                      label: const Text('Показывать удалённые'),
+                      selected: q.includeDeleted,
+                      onSelected: (v) => _go(q.copyBase(includeDeleted: v)),
+                    ),
                   if (narrow) _sortMenu(q),
                   if (q.hasFilters)
                     TextButton.icon(
@@ -225,14 +238,15 @@ class _EntityListViewState<T extends Entity, Q extends ListQuery<Q>>
                       icon: const Icon(Icons.filter_alt_off_outlined),
                       label: const Text('Сбросить'),
                     ),
-                  FilledButton.icon(
-                    onPressed: () => context.push('${widget.basePath}/new'),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Добавить'),
-                  ),
+                  if (auth.can(Op.editRecords))
+                    FilledButton.icon(
+                      onPressed: () => context.push('${widget.basePath}/new'),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Добавить'),
+                    ),
                 ],
               ),
-              if (n.hasSelection)
+              if (n.hasSelection && auth.can(Op.softDelete))
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Wrap(
@@ -396,12 +410,15 @@ class EntityDetailView<T extends Entity, Q extends ListQuery<Q>>
                                   extra!(context, item),
                                 ],
                                 const SizedBox(height: 16),
-                                FilledButton.icon(
-                                  onPressed: () =>
-                                      context.push('$listPath/$id/edit'),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  label: const Text('Изменить'),
-                                ),
+                                if (context.watch<AuthNotifier>().can(
+                                  Op.editRecords,
+                                ))
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        context.push('$listPath/$id/edit'),
+                                    icon: const Icon(Icons.edit_outlined),
+                                    label: const Text('Изменить'),
+                                  ),
                               ],
                             ),
                     ),

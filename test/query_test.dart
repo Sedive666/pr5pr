@@ -1,23 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoe_store/core/auth_api.dart';
 import 'package:shoe_store/main.dart';
+import 'package:shoe_store/models/app_user.dart';
 import 'package:shoe_store/router.dart';
+import 'package:shoe_store/state/auth_notifier.dart';
 
 import 'fake_api.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late AuthNotifier auth;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    auth = AuthNotifier.signedIn(
+      await SharedPreferences.getInstance(),
+      AuthApi(),
+      const AppUser(
+        id: 2,
+        login: 'manager',
+        name: 'Менеджер',
+        role: Role.manager,
+      ),
+    );
+  });
+
+  ShoeStoreApp app(String location) => ShoeStoreApp(
+    auth: auth,
+    dio: fakeDio(),
+    router: createRouter(auth, initialLocation: location),
+  );
+
   Future<void> open(WidgetTester tester, String location) async {
     tester.view.physicalSize = const Size(1400, 2600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ShoeStoreApp(
-        dio: fakeDio(),
-        router: createRouter(initialLocation: location),
-      ),
-    );
+    await tester.pumpWidget(app(location));
     await tester.pumpAndSettle();
   }
 
@@ -66,12 +86,7 @@ void main() {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ShoeStoreApp(
-        dio: fakeDio(),
-        router: createRouter(initialLocation: '/categories'),
-      ),
-    );
+    await tester.pumpWidget(app('/categories'));
     await tester.pumpAndSettle();
     expect(find.byType(Card), findsWidgets);
     expect(find.byType(DataTable), findsNothing);

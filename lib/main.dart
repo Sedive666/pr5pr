@@ -3,30 +3,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/api_client.dart';
+import 'core/auth_api.dart';
 import 'models/queries.dart';
 import 'repositories/repositories.dart';
 import 'router.dart';
+import 'state/auth_notifier.dart';
 import 'state/list_notifier.dart';
+import 'widgets/inactivity_watcher.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
-  runApp(const ShoeStoreApp());
+  final auth = AuthNotifier(await SharedPreferences.getInstance(), AuthApi());
+  await auth.restore();
+  runApp(ShoeStoreApp(auth: auth, router: createRouter(auth)));
 }
 
-class ShoeStoreApp extends StatelessWidget {
-  const ShoeStoreApp({super.key, this.dio, this.router});
+final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
+class ShoeStoreApp extends StatelessWidget {
+  const ShoeStoreApp({
+    super.key,
+    required this.auth,
+    required this.router,
+    this.dio,
+  });
+
+  final AuthNotifier auth;
+  final GoRouter router;
   final Dio? dio;
-  final GoRouter? router;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider<Dio>(create: (_) => dio ?? buildDio()),
+        ChangeNotifierProvider<AuthNotifier>.value(value: auth),
+        Provider<Dio>(create: (_) => dio ?? buildDio(auth: auth)),
         ProxyProvider<Dio, Repositories>(
           update: (_, dio, __) => Repositories(dio),
         ),
@@ -80,7 +95,13 @@ class ShoeStoreApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
           useMaterial3: true,
         ),
-        routerConfig: router ?? appRouter,
+        scaffoldMessengerKey: messengerKey,
+        routerConfig: router,
+        builder: (context, child) => InactivityWatcher(
+          auth: auth,
+          messengerKey: messengerKey,
+          child: child!,
+        ),
       ),
     );
   }

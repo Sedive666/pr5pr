@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../state/auth_notifier.dart';
 import 'api_exceptions.dart';
 import 'config.dart';
 
-Dio buildDio({String? Function()? tokenProvider}) {
+Dio buildDio({AuthNotifier? auth}) {
   final dio = Dio(
     BaseOptions(
       baseUrl: apiBaseUrl,
@@ -18,10 +19,6 @@ Dio buildDio({String? Function()? tokenProvider}) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
-        final token = tokenProvider?.call();
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
         final delay = Uri.base.queryParameters['__delay'];
         if (delay != null) {
           options.queryParameters = {
@@ -64,8 +61,51 @@ Dio buildDio({String? Function()? tokenProvider}) {
     ),
   );
 
+  if (auth != null) dio.interceptors.add(AuthInterceptor(dio, auth));
   dio.interceptors.add(RetryInterceptor(dio));
   return dio;
+}
+
+class AuthInterceptor extends Interceptor {
+  AuthInterceptor(this._dio, this._auth);
+
+  final Dio _dio;
+  final AuthNotifier _auth;
+
+  static const _retried = 'auth_retried';
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final token = _auth.accessToken;
+    if (token != null) options.headers['Authorization'] = 'Bearer $token';
+    handler.next(options);
+  }
+
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final options = err.requestOptions;
+    if (err.response?.statusCode != 401 ||
+        options.path.contains('/auth/') ||
+        !_auth.isAuthenticated) {
+      return handler.next(err);
+    }
+    if (options.extra[_retried] == true) {
+      await _auth.logout(reason: 'Сессия недействительна, войдите заново');
+      return handler.next(err);
+    }
+    if (!await _auth.refreshTokens()) return handler.next(err);
+
+    if (kDebugMode) debugPrint('[AUTH] повтор ${options.uri}');
+    options.extra = {...options.extra, _retried: true};
+    try {
+      return handler.resolve(await _dio.fetch(options));
+    } on DioException catch (e) {
+      return handler.next(e);
+    }
+  }
 }
 
 class RetryInterceptor extends Interceptor {

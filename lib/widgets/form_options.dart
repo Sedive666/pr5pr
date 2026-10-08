@@ -6,7 +6,10 @@ import '../models/category.dart';
 import '../models/customer.dart';
 import '../models/series.dart';
 import '../models/sneaker.dart';
+import '../core/api_exceptions.dart';
+import '../core/permissions.dart';
 import '../repositories/repositories.dart';
+import '../state/auth_notifier.dart';
 import 'app_scaffold.dart';
 
 class CatalogOptions {
@@ -45,11 +48,17 @@ class _OptionsLoaderState extends State<OptionsLoader> {
 
   Future<CatalogOptions> _load() async {
     final repos = context.read<Repositories>();
+    final staff = context.read<AuthNotifier>().can(Op.viewCustomers);
     return CatalogOptions(
       brands: await repos.brands.all(),
       series: await repos.series.all(),
       categories: await repos.categories.all(),
-      customers: await repos.customers.all(),
+      customers: staff
+          ? await repos.customers.all().catchError(
+              (_) => <Customer>[],
+              test: (e) => e is ForbiddenException,
+            )
+          : const [],
       sneakers: await repos.sneakers.all(),
     );
   }
