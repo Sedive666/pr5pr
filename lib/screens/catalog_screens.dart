@@ -341,4 +341,3 @@ class SeriesFormScreen extends StatelessWidget {
     );
   }
 }
-

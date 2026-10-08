@@ -42,9 +42,8 @@ class SneakerListScreen extends StatelessWidget {
           ),
           TableColumnSpec(
             label: 'Категории',
-            build: (s) => Text(
-              namesOf(o.categories, s.categoryIds, (c) => c.name),
-            ),
+            build: (s) =>
+                Text(namesOf(o.categories, s.categoryIds, (c) => c.name)),
           ),
           TableColumnSpec(
             label: 'Год',
@@ -209,8 +208,7 @@ class SneakerFormScreen extends StatelessWidget {
           DropdownFieldSpec(
             name: 'brandId',
             label: 'Бренд',
-            options: (_) =>
-                entriesOf(o.brands, (b) => b.id, (b) => b.name),
+            options: (_) => entriesOf(o.brands, (b) => b.id, (b) => b.name),
             validator: (v) => v == null ? 'Выберите бренд' : null,
           ),
           MultiSelectFieldSpec(
@@ -232,8 +230,7 @@ class SneakerFormScreen extends StatelessWidget {
           MultiSelectFieldSpec(
             name: 'categoryIds',
             label: 'Категории',
-            options: (_) =>
-                entriesOf(o.categories, (c) => c.id, (c) => c.name),
+            options: (_) => entriesOf(o.categories, (c) => c.id, (c) => c.name),
             validator: (v) =>
                 v.isEmpty ? 'Выберите хотя бы одну категорию' : null,
           ),
@@ -266,4 +263,3 @@ class SneakerFormScreen extends StatelessWidget {
     );
   }
 }
-

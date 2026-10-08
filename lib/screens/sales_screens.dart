@@ -194,9 +194,7 @@ class OrderFormScreen extends StatelessWidget {
           DropdownFieldSpec(
             name: 'size',
             label: 'Размер',
-            options: (_) => [
-              for (final s in shoeSizes) DropdownEntry(s, '$s'),
-            ],
+            options: (_) => [for (final s in shoeSizes) DropdownEntry(s, '$s')],
             validator: (v) => v == null ? 'Выберите размер' : null,
           ),
           TextFieldSpec(
@@ -377,4 +375,3 @@ class ReviewFormScreen extends StatelessWidget {
     );
   }
 }
-

@@ -34,5 +34,4 @@ abstract interface class EntityRepository<
   Future<void> hardDelete(int id);
   Future<void> restore(int id);
   Future<int> deleteMany(List<int> ids);
-  Future<int> countWhere(bool Function(T item) test);
 }

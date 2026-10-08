@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shoe_store/main.dart';
 import 'package:shoe_store/router.dart';
 
+import 'fake_api.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -12,7 +14,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ShoeStoreApp(
-        repositories: buildRepositories(null, delay: Duration.zero),
+        dio: fakeDio(),
         router: createRouter(initialLocation: location),
       ),
     );
@@ -22,7 +24,7 @@ void main() {
   testWidgets('список восстанавливается из адреса', (tester) async {
     await open(tester, '/sneakers?search=ultraboost');
     expect(find.text('Adidas Ultraboost 22'), findsOneWidget);
-    expect(find.text('Всего записей: 3'), findsOneWidget);
+    expect(find.text('Всего записей: 1'), findsOneWidget);
   });
 
   testWidgets('пустой результат', (tester) async {
@@ -66,7 +68,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ShoeStoreApp(
-        repositories: buildRepositories(null, delay: Duration.zero),
+        dio: fakeDio(),
         router: createRouter(initialLocation: '/categories'),
       ),
     );

@@ -25,31 +25,83 @@ class CatalogOptions {
   final List<Sneaker> sneakers;
 }
 
-class OptionsLoader extends StatelessWidget {
+class OptionsLoader extends StatefulWidget {
   const OptionsLoader({super.key, required this.builder});
 
   final Widget Function(BuildContext context, CatalogOptions options) builder;
 
-  Future<CatalogOptions> _load(Repositories repos) async => CatalogOptions(
-    brands: await repos.brands.all(),
-    series: await repos.series.all(),
-    categories: await repos.categories.all(),
-    customers: await repos.customers.all(),
-    sneakers: await repos.sneakers.all(),
-  );
+  @override
+  State<OptionsLoader> createState() => _OptionsLoaderState();
+}
+
+class _OptionsLoaderState extends State<OptionsLoader> {
+  late Future<CatalogOptions> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<CatalogOptions> _load() async {
+    final repos = context.read<Repositories>();
+    return CatalogOptions(
+      brands: await repos.brands.all(),
+      series: await repos.series.all(),
+      categories: await repos.categories.all(),
+      customers: await repos.customers.all(),
+      sneakers: await repos.sneakers.all(),
+    );
+  }
+
+  void _retry() => setState(() => _future = _load());
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<CatalogOptions>(
-      future: _load(context.read<Repositories>()),
+      future: _future,
       builder: (context, snap) {
+        if (snap.hasError) {
+          final colors = Theme.of(context).colorScheme;
+          return AppScaffold(
+            title: 'Справочники',
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(48),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_off, size: 48, color: colors.error),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Не удалось загрузить справочники',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${snap.error}',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _retry,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Повторить'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const AppScaffold(
-            title: 'Форма',
+            title: 'Справочники',
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return builder(context, snap.data!);
+        return widget.builder(context, snap.data!);
       },
     );
   }

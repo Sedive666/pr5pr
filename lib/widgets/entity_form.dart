@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/api_exceptions.dart';
 import '../repositories/entity_repository.dart';
 import 'app_scaffold.dart';
 import 'field_spec.dart';
@@ -83,9 +84,7 @@ class _EntityFormScreenState extends State<EntityFormScreen> {
       if (field is SectionSpec && field.optional) {
         _sections[field.name] =
             _sections[field.name] ??
-            field.fields.any(
-              (f) => (_values.text[f.name] ?? '').isNotEmpty,
-            );
+            field.fields.any((f) => (_values.text[f.name] ?? '').isNotEmpty);
       }
     }
     if (mounted) setState(() => _ready = true);
@@ -138,9 +137,10 @@ class _EntityFormScreenState extends State<EntityFormScreen> {
     }
     for (final entry in _sections.entries) {
       if (!entry.value) {
-        final section = widget.fields(_values).whereType<SectionSpec>().firstWhere(
-          (s) => s.name == entry.key,
-        );
+        final section = widget
+            .fields(_values)
+            .whereType<SectionSpec>()
+            .firstWhere((s) => s.name == entry.key);
         for (final f in section.fields) {
           _values.text.remove(f.name);
           _values.textChoice.remove(f.name);
@@ -156,6 +156,13 @@ class _EntityFormScreenState extends State<EntityFormScreen> {
       _dirty = false;
       messenger.showSnackBar(const SnackBar(content: Text('Запись сохранена')));
       _leave();
+    } on ValidationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _fieldErrors.addAll(e.errors);
+      });
+      _formKey.currentState!.validate();
     } on FieldException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -163,6 +170,10 @@ class _EntityFormScreenState extends State<EntityFormScreen> {
         _fieldErrors[e.field] = e.message;
       });
       _formKey.currentState!.validate();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -273,9 +284,7 @@ class _EntityFormScreenState extends State<EntityFormScreen> {
       _values.text[key] = _controllers[key]!.text;
     }
     final all = options(_values);
-    return filter == null
-        ? all
-        : all.where((e) => filter(_values, e)).toList();
+    return filter == null ? all : all.where((e) => filter(_values, e)).toList();
   }
 
   Widget _dropdown(DropdownFieldSpec f) {
@@ -334,7 +343,8 @@ class _EntityFormScreenState extends State<EntityFormScreen> {
     return FormField<List<int>>(
       key: ValueKey('${f.name}-${entries.length}'),
       initialValue: current,
-      validator: (v) => _fieldErrors[f.name] ?? f.validator?.call(v ?? const []),
+      validator: (v) =>
+          _fieldErrors[f.name] ?? f.validator?.call(v ?? const []),
       builder: (field) => InputDecorator(
         decoration: fieldDecoration(f.label, error: field.errorText),
         child: entries.isEmpty
